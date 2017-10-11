@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# This file calls DOSingleRecord for all sac files in a given directory
+# It also saves the filter frequencies to a master file for the event
+reqparams=5
+if [ $# -ne $reqparams ];then
+	echo "Usage requires 2 files"
+	exit
+fi
+
+sac=$1
+sac2=$2
+az1=$3
+az2=$4
+dt=$5
+
+echo "Beginning GmRotD50 on the paired sac files"
+
+l1=`wc -l $sac`
+l2=`wc -l $sac2`
+
+VALS=`cat Periods.txt | xargs -n1 -P0 GmRotD50 $l1 $l2 $dt $az1 $az2`
+echo "$VALS" > ${sac}.VALS

@@ -1,0 +1,35 @@
+#!/bin/bash
+
+HOME="/Users/srennolet/Working_Data/CEUS"
+cd=${HOME}
+pwd
+while read MAG 	LON	LAT	DEPTH	YEAR	MON	DAY	HOUR	MIN	SEC	MSEC	YYY	MAG2	ZZZ
+do 
+
+cd ${HOME}
+#LOC=`java Within ${LAT} ${LON}`
+
+DIR=${YEAR}${MON}${DAY}${HOUR}${MIN}${SEC}
+
+if [ -d "$DIR" ]
+then
+
+cp PROTO.WS/IDOEVT $DIR/$DIR/
+cd $DIR/$DIR/
+
+ed IDOEVT << EOF
+/ADDAFTERHERE/
+.r evt.proto
+.
+w
+q
+EOF
+
+#rm GOOD
+
+IDOEVT
+
+fi
+
+done < ${HOME}/a
+

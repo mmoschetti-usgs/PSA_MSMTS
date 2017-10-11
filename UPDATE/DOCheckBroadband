@@ -1,0 +1,33 @@
+#!/bin/bash
+# This file looks at raw broadband records and reports if their
+# Maximum count is over 2 mil. This is the value where the 
+# instrument begins to act nonlinearly.
+# This script is only and template and should be implemented
+# in IDOEVT right before instrument response
+
+for file in *.SAC
+do
+
+CHN=`saclhdr -KCMPNM $file`
+
+if [[ $CHN == BH* ]];then
+
+gsac << EOF
+r $file
+rmean
+w temp
+exit
+EOF
+
+AMAX=2e+06
+DMAX=`saclhdr -DEPMAX temp`
+
+c=`CompGT $DMAX $AMAX`
+if [[ $c == 1 ]]; then
+	echo "Bad file. Get rid of it!"
+fi
+
+fi
+done
+
+rm temp

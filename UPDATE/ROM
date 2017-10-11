@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# This is the test script for GmRotD50
+td="/home/srennolet/Testing/"
+
+#Given two sac files, compute RotD50 on all of them..?
+
+file1="HE"
+file2="HN"
+
+#This will be done by giving it two files, use xargs to perform on all periods
+# in the periods.txt file. Should be pretty straightforward??
+
+cd $td
+
+# Should I recompile sac2ascii here to use it? It wouldn't hurt...
+dt=0.01
+az1=0
+az2=90
+
+l1=`wc -l $file1`
+l2=`wc -l $file2`
+
+#f=1.0
+
+#DOPairRecords $file1 $file2 CLEAN
+
+#This is where things get interesting
+#work=`GmRotD50 $l1 $l2 $dt $az1 $az2 $f`
+#set $work
+#psa=$1
+#Mpsa=$2
+
+VALS=`cat Periods.txt | xargs -n1 -P0 GmRotD50 $l1 $l2 $dt $az1 $az2`
+
+set -x
+echo "$VALS" > TEMP.txt
+
+

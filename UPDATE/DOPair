@@ -1,0 +1,126 @@
+#!/bin/bash
+
+# This file calls DOSingleRecord for all sac files in a given directory
+# It also saves the filter frequencies to a master file for the event
+reqparams=2
+if [ $# -ne $reqparams ];then
+	echo "Usage requires 2 sac files"
+	exit
+fi
+
+sac=$1
+sac2=$2
+
+CLEAR=1
+
+FREQS=""
+COUNT=0
+
+CHN=`saclhdr -KCMPNM $sac`
+STA=`saclhdr -KSTNM $sac`
+NW=`saclhdr -KNETWK $sac`
+LOC=`saclhdr -KHOLE $sac`
+DIST=`saclhdr -DIST $sac`
+LAT=`saclhdr -STLA $sac`
+LON=`saclhdr -STLO $sac`
+ELEV=`saclhdr -STEL $sac`
+
+if [[ $LOC = -12345 ]];then
+	LOC=""
+fi
+CHN2=`echo "$CHN" | rev | cut -c 2- |rev `
+CHQ=$CHN2"X"
+sacQ=${STA}${CHQ}.${NW}.${LOC}.sac
+
+# Process both of the files
+RES=`DOS1 $sac`
+
+freq=`echo "$RES" | tr ' ' '\n' | grep freq= | head -n 1 | cut -c 6-`
+Rfreq=`echo "$RES" | tr ' ' '\n' | grep Rfreq= | cut -c 7-`
+fname=`echo "$RES" | tr ' ' '\n' | grep nfile= | cut -c 7-`
+
+echo "|Cross Over Frequency - $freq (R1)"
+echo "|Cross Over Frequency - $Rfreq (R3)"
+echo "|File for RotD50 - $fname"
+FREQS=${FREQS}"${sac}\t${freq}\t${Rfreq}\n"
+
+RES=`DOS1 $sac2`
+
+freq2=`echo "$RES" | tr ' ' '\n' | grep freq= | head -n 1 | cut -c 6-`
+Rfreq2=`echo "$RES" | tr ' ' '\n' | grep Rfreq= | cut -c 7-`
+fname2=`echo "$RES" | tr ' ' '\n' | grep nfile= | cut -c 7-`
+
+echo "|Cross Over Frequency - $freq2 (R1)"
+echo "|Cross Over Frequency - $Rfreq2 (R3)"
+echo "|File for RotD50 - $fname2"
+FREQS=${FREQS}"${sac2}\t${freq2}\t${Rfreq2}\n"
+echo""
+
+#Perform RotD50 on the files to get GM PSA
+# Loop over all the periods
+if [[ $fname = "FAIL" || $fname2 = "FAIL" ]];then
+	Rfreq=9999
+	Rfreq2=9999
+	if [[ $CLEAR == 1 ]]; then
+		rm ${sac}.*
+		rm ${sac2}.*
+	fi
+	echo "One or more of the files filed in the processing steps."
+	echo "PSA values will not be calculated or reported."
+	echo "---------------------------------------------------"
+	echo "Finished file $COUNT of $TOT"
+	exit
+else 
+	L1=`wc -l $fname`
+	L2=`wc -l $fname2`
+fi
+az1=`saclhdr -CMPAZ $sac`
+az2=`saclhdr -CMPAZ $sac2`
+DELTA=`saclhdr -DELTA $sac`
+echo "Beginning GmRotD50 on the paired sac files"
+
+periods=( "0.1" "0.2" "0.3" "0.5" "1.0" "2.0" "3.0" "5.0" "10.0" "0.0" "-1.0")
+
+DAT="$DIST\t$freq\t$Rfreq\t$freq2\t$Rfreq2\t$LAT\t$LON\t$ELEV\n"
+for p in "${periods[@]}" 
+do
+DAT="${DAT}$p\t"
+done
+DAT="${DAT}\n"
+MDAT="${DAT}\n"
+RATIO=1.25 #This value effects the usable periods for spectral measurements
+for p in "${periods[@]}"
+do
+# Compare the filter period to the spectral period
+t1=$(echo "scale=8; 1/($Rfreq*$RATIO)" |bc);
+t2=$(echo "scale=8; 1/($Rfreq2*$RATIO)" |bc);
+GT=`CompGT $p $t1`
+GT2=`CompGT $p $t2`
+if [[ $GT = 1 || $GT2 = 1 ]];then
+	psa="-9999"
+	Mpsa="-9999"
+else
+	work=`GmRotD50 $L1 $L2 $DELTA $az1 $az2 $p`
+	if [[ $work = 0000 ]];then
+		psa=-9999
+		Mpsa=-9999
+	else
+		set $work
+		psa=$1
+		Mpsa=$2
+	fi
+fi
+#psa=`RScalc $p $NPTS $nafile`
+DAT="${DAT}$psa\t"
+MDAT="${MDAT}$Mpsa\t"
+done
+
+if [[ $CLEAR == 1 ]]; then
+	rm ${sac}.*
+	rm ${sac2}.*
+fi
+
+# Ugly perl chomp gets ride of the last new line
+# echo -e "$DAT" | perl -pe 'chomp if eof' > $sacQ.psa
+echo -e "$DAT" > $sacQ.psa
+echo -e "$MDAT" > $sacQ.Mpsa

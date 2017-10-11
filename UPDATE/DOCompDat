@@ -1,0 +1,39 @@
+#!/bin/bash
+
+HOME="/Users/srennolet/Working_Data/CEUS"
+cd ${HOME}
+
+f2w=$HOME"/Compile2.txt"
+rm $f2w
+for dir in 20*;
+do
+
+#echo $dir
+cd $HOME/$dir/$dir/GOOD
+
+#Quickly get the magnitude!
+for sac in *sac
+do
+MAG=`saclhdr -MAG $sac`
+break
+done
+
+while read DIST	P1	P2	P3	P5	S1P	S2P	S3P	S5P	S10P	PGA	PGV
+do
+
+if [[ $DIST = 000 ]];then
+continue
+fi
+
+if [[ $P1 = "" ]];then
+break
+fi
+if [[ $P1 = FAILURE ]];then
+break
+fi
+
+echo -e "$dir\t$DIST\t$MAG\t$P2\t$S1P\t$S2P" >> $f2w
+
+
+done < Master.psa
+done

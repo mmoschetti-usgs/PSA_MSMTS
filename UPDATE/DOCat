@@ -1,0 +1,21 @@
+#!/bin/bash
+# This file concats the various psa files into a single
+# Master.psa file in the current directory
+# Note if the calulated periods are changed,
+# This file should also change.
+
+PERIODS="000\t0.1\t0.2\t0.3\t0.5\t1\t2\t3\t5\t10"
+FIL="$PERIODS"
+
+for psa in *.psa
+do
+
+KEY=`more $psa | head -n 1`
+set $KEY #This breakys KEY into $1,$2,$3 etc...
+DIST=$1
+MEASURE=`more $psa | tail -n 1`
+FIL="$FIL\n${DIST}\t${MEASURE}"
+
+done
+
+echo -e "$FIL" > Master.psa

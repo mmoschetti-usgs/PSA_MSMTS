@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# This is the test script for GmRotD50
+set -x
+td="/Users/srennolet/code/c/testFiles/"
+
+file1="WMOKHN1.US.20.sac"
+file2="WMOKHN2.US.20.sac"
+
+cd $td
+
+dt=`saclhdr -DELTA $file1`
+az1=`saclhdr -CMPAZ $file1`
+az2=`saclhdr -CMPAZ $file2`
+
+sac2ascii_c $file1
+sac2ascii_c $file2
+
+l1=`wc -l $file1.ascii`
+l2=`wc -l $file2.ascii`
+
+f=1.0
+
+#DOPairRecords $file1 $file2 CLEAN
+work=`GmRotD50 $l1 $l2 $dt $az1 $az2 $f`
+set $work
+psa=$1
+Mpsa=$2

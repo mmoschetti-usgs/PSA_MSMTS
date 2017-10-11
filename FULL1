@@ -1,0 +1,14 @@
+#!/bin/bash
+
+sfile='/Users/srennolet/code/c/testFiles/W35A.sac'
+sac2ascii_c $sfile
+file=${sfile}.ascii
+
+etime=`saclhdr -O $sfile`
+length=`wc -l $file`
+dist=`saclhdr -DIST $sfile`
+period="1.0"
+
+echo "./RScalc $period $length"
+./RScalc $period $length
+

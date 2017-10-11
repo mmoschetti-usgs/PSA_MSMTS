@@ -1,0 +1,16 @@
+#!/bin/bash
+
+HOME="/Users/srennolet/Working_Data/CEUS"
+cd ${HOME}
+
+for dir in 20*;
+do
+
+#echo $dir
+cd $HOME/$dir/$dir/GOOD
+
+#Quickly get the magnitude!
+rm *acc.final.txt
+
+
+done

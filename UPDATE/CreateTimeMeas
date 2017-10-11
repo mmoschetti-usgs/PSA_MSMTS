@@ -1,0 +1,247 @@
+#!/bin/bash
+
+# CreateTimeMeas
+# This script will perform two bandpasses on the data and calculate the RotD50 PGA Time.
+
+dir=$1
+
+echo -e "------------------------------------------------------------------------------\n\n\n"
+echo $dir
+echo -e "\n\n\n------------------------------------------------------------------------------\n"
+cd $dir
+
+for sac in *.sac
+do
+
+CHN=`saclhdr -KCMPNM $sac`
+if [[ $CHN = ??1 || $CHN = ??E ]];then
+
+#Get The horizontal pair to this record.
+STA=`saclhdr -KSTNM $sac`
+NW=`saclhdr -KNETWK $sac`
+LOC=`saclhdr -KHOLE $sac`
+DIST=`saclhdr -DIST $sac`
+MAG=`saclhdr -MAG $sac`
+LAT=`saclhdr -STLA $sac`
+LON=`saclhdr -STLO $sac`
+ELEV=`saclhdr -STEL $sac`
+
+if [[ $LOC = -12345 ]];then
+	LOC=""
+fi
+
+CHN2=`echo "$CHN" | rev | cut -c 2- |rev `
+CHQ=$CHN2"X"
+if [[ $CHN = ??1 ]]; then
+	CHN2=$CHN2"2"
+else
+	CHN2=$CHN2"N"
+fi
+sac2=${STA}${CHN2}.${NW}.${LOC}.sac
+META=${STA}${CHQ}.${NW}.${LOC}.sac.meta
+
+if [ ! -f $META ];then
+	echo "The meta file could not be found for file $sac"
+	continue
+fi
+
+# Stuff thats necessary...
+DELTA=`saclhdr -DELTA $sac`
+az1=`saclhdr -CMPAZ $sac`
+az2=`saclhdr -CMPAZ $sac2`
+
+
+OT1=`saclhdr -O $sac`
+OT2=`saclhdr -O $sac2`
+
+C9=`CompGT $OT1 $OT2`
+if [ $C9 = 1 ];then
+	CUTTER=`echo "$OT2" | awk ' { if($1<0) {print $1} else {print $1*-1 }}'`
+else
+	CUTTER=`echo "$OT1" | awk ' { if($1<0) {print $1} else {print $1*-1 }}'`
+fi
+
+orig1=$sac
+orig2=$sac2
+sac << EOF
+cut O $CUTTER 600
+#cut O -20 700
+r $sac $sac2
+SYNCHRONIZE
+w append .TEMP.sac 
+exit
+EOF
+
+sac=$sac.TEMP.sac
+sac2=$sac2.TEMP.sac
+
+#WINDOW OUT THE DATA!
+
+FLAG=0
+sfiles=($sac $sac2)
+FIRST=1
+
+for sfile in ${sfiles[@]}
+do
+
+OT=`saclhdr -O $sfile`
+c=`CompGT 0 $OT`
+
+if [[ $c1 = 1 ]];then
+	FLAG=1
+	continue
+fi
+# How to do more complicated processing
+NEXTE=`saclhdr -T7 $sfile`
+NEXTE=$(echo "scale=8; $NEXTE-$OT" |bc);
+Cnext=`CompGT 0 $NEXTE`
+
+# If The next event is less than 0 (Usually undefined) OR
+# if the normal window is less than the next event time
+ENDTIME=$DIST
+c5=`CompGT 120 $ENDTIME`
+if [[ $c5 = 1 ]];then
+	ENDTIME=120
+fi
+CnAd=`CompGT $NEXTE $ENDTIME`
+
+if [[ $Cnext = 1 || $CnAd = 1 ]];then
+	>&2 echo "Using the distance as endtime."
+else
+	NEXTA=`saclhdr -T2 $sfile`
+	NEXTA=$(echo "scale=8; $NEXTA-$OT" |bc);
+
+	Cnext2=`CompGT 0 $NEXTA`
+	CaAd=`CompGT $NEXTA $ENDTIME`
+	if [[ $Cnext2 = 1 ]];then
+		FLAG=1 #No P arrival for information. :(
+		continue
+	elif [[ $CaAd = 1 ]];then
+	>&2 echo "Using the distance as endtime."
+	else
+		ENDTIME=$NEXTA
+	fi
+
+fi # If next event exists here.
+
+
+sac << EOF
+CUTERR USEBE
+cut O -120 $ENDTIME
+#cut O -120 $ENDTIME
+r $sfile
+taper
+SYNCHRONIZE
+w append .taper
+quit
+EOF
+STAR=`saclhdr -O $sfile.taper`
+START=$(echo "scale=3; $STAR*-1" |bc);
+ENDT=`saclhdr -E $sfile.taper`
+ENDTIME=$(echo "scale=8; $ENDT-$STAR" |bc);
+
+if [ $FIRST = 1 ];then
+	TEMPEND=$ENDTIME
+	TEMPSTART=$START
+	FIRST=0
+fi
+
+done # Loop over both files for windowing
+
+if [ $FLAG = 1 ]
+then # If Failed an earlier step, don't continue this pair of records.
+continue
+fi
+
+# Add the window duration to the meta file.
+grep -v DURATION $META > temporary
+mv temporary $META
+echo DURATION1=\"$TEMPEND\" >> $META
+echo DURATION2=\"$ENDTIME\" >> $META
+
+grep -v TSTART $META > temporary
+mv temporary $META
+echo TSTART1=\"$TEMPSTART\" >> $META
+echo TSTART2=\"$START\" >> $META
+#continue #TODO TODO TODO TODO
+#****************
+# Complete bandpass filters centerd at 1s and 3s.
+# Cacluate the time and report that into the meta data file.
+
+sac << EOF
+r $sac.taper $sac2.taper
+bp n 5 pass 2 c 0.66 1.5
+w append .temp1
+
+r $sac.taper $sac2.taper
+bp n 5 pass 2 c 0.18 0.5
+w append .temp3
+
+exit
+EOF
+
+sac2ascii_c $sac.taper.temp1
+sac2ascii_c $sac2.taper.temp1
+FILE1=$sac.taper.temp1.ascii
+FILE2=$sac2.taper.temp1.ascii
+
+L1=`wc -l $FILE1`
+L2=`wc -l $FILE2`
+
+work=`RotD50 $L1 $L2 $DELTA $az1 $az2 0`
+
+tim=0
+if [[ $work = 0000 ]];then
+	tim=-999
+else
+	set $work
+	psa=$1
+	Mpsa=$2
+	tim=$3
+fi
+
+C1=`CompGT $tim 0`
+OT=`saclhdr -O $sac.taper.temp1`
+if [[ $C1 == 1 ]];then
+	grep -v PSA1ti $META > temporary
+	mv temporary $META
+	maxtime=$(echo "scale=8; $tim-$OT" |bc);
+	echo PSA1ti=\"$maxtime\" >> $META
+fi
+ 
+#and Again but for the other band
+sac2ascii_c $sac.taper.temp3
+sac2ascii_c $sac2.taper.temp3
+FILE1=$sac.taper.temp3.ascii
+FILE2=$sac2.taper.temp3.ascii
+
+L1=`wc -l $FILE1`
+L2=`wc -l $FILE2`
+
+work=`RotD50 $L1 $L2 $DELTA $az1 $az2 0`
+
+tim=0
+if [[ $work = 0000 ]];then
+	tim=-999
+else
+	set $work
+	psa=$1
+	Mpsa=$2
+	tim=$3
+fi
+
+C1=`CompGT $tim 0`
+OT=`saclhdr -O $sac.taper.temp3`
+if [[ $C1 == 1 ]];then
+	grep -v PSA3ti $META > temporary
+	mv temporary $META
+	maxtime=$(echo "scale=8; $tim-$OT" |bc);
+	echo PSA3ti=\"$maxtime\" >> $META
+fi
+
+fi # Easting or 1 if
+done #Sac file loop
+rm *temp*
+rm *taper
+rm *TEMP*
+

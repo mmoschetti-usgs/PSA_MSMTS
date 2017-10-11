@@ -1,0 +1,19 @@
+#!/bin/bash
+
+HOME="/Users/srennolet/Working_Data/CEUS"
+cd ${HOME}
+pwd
+while read MAG 	LON	LAT	DEPTH	YEAR	MON	DAY	HOUR	MIN	SEC	MSEC	YYY	XXX	ZZZ
+do 
+
+DIR=${YEAR}${MON}${DAY}${HOUR}${MIN}${SEC}
+
+if [ -d "$DIR" ]
+then
+G=$HOME/$DIR/$DIR/GOOD/
+echo "$G" >> GOODS4
+
+fi
+
+done < b
+

@@ -1,0 +1,28 @@
+#!/bin/bash
+
+reqparams=1
+if [$# -ne $reqparams];then
+	echo "I need an ascii file to plot!"
+	exit
+fi
+file=$1
+
+octave << EOF
+clear;
+a = load('$file');
+t = a(:,1);
+w = a(:,2);
+
+[freq,amp] = getFFT(t,w);
+
+setenv("GNUTERM","qt");
+figure('Position',[200,200,600,1400]);
+subplot(1,2,1);
+plot(t,w);
+xlim([min(t) max(t)]);
+subplot(1,2,2);
+loglog(freq,amp);
+while (true)
+pause();
+end
+EOF

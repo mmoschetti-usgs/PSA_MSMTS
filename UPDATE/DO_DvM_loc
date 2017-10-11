@@ -1,0 +1,62 @@
+#!/bin/sh
+
+# Script to write a file that includes Station locations and
+# Distance to the event with respective magnitude
+# Written for the CEUS directory structure
+
+WHOME="/Users/srennolet/Working_Data/CEUS/"
+cd $WHOME
+echo `pwd`
+rm DvM.txt RLocs.txt ELocs.txt
+touch DvM.txt
+touch RLocs.txt
+touch ELocs.txt
+
+COUNTER=0
+
+for e in 20*
+do
+
+let COUNTER=COUNTER+1
+echo "Entering event $e  This is event $COUNTER of 763"
+cd $WHOME/$e/$e/Sac
+
+for sac in *.SAC
+do
+
+DIST=`saclhdr -DIST $sac`
+MAG=`saclhdr -MAG $sac`
+
+RLAT=`saclhdr -STLA $sac`
+RLON=`saclhdr -STLO $sac`
+
+ELAT=`saclhdr -EVLA $sac`
+ELON=`saclhdr -EVLO $sac`
+
+CT=`saclhdr -KCMPNM $sac`
+
+if [[ $CT == *"CH"* ]]
+then 
+NUMTYPE="1"
+elif [[ $CT == *"EN"* ]]
+then
+NUMTYPE="2"
+elif [[ $CT == *"HN"* ]]
+then
+NUMTYPE="3"
+elif [[ $CT == *"BH"* ]]
+then
+NUMTYPE="4"
+else
+NUMTYPE="9"
+fi
+
+echo ${DIST} ${MAG} >> ${WHOME}Dvm.txt
+echo ${RLAT} ${RLON} ${NUMTYPE} >> ${WHOME}RLocs.txt
+
+done
+
+echo ${ELAT} ${ELON} ${MAG} >> ${WHOME}ELocs.txt
+
+done
+

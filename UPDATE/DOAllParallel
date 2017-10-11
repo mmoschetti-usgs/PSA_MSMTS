@@ -1,0 +1,9 @@
+#!/bin/bash
+set -x
+
+HOME="/Users/srennolet/Working_Data/CEUS"
+cd ${HOME}
+
+cat GOODS3 | xargs -n1 -P8 DOAllPairs
+#parallel -a GOODS2 DOAllPairs
+

@@ -1,0 +1,68 @@
+#!/bin/bash
+
+HOME="/Users/srennolet/Working_Data/CEUS"
+cd ${HOME}
+set -x
+
+f2w=$HOME"/AnomFiles.txt"
+rm $f2w
+for dir in 20*;
+do
+
+#echo $dir
+cd $HOME/$dir/$dir/GOOD
+
+#Quickly get the magnitude!
+for sac in *sac
+do
+MAG=`saclhdr -MAG $sac`
+break
+done
+#Only look at magnitudes less than 3.4
+c1=`CompGT $MAG 3.4`
+if [[ $c1 = 1 ]];then
+continue
+fi
+
+while read DIST	P1	P2	P3	P5	S1P	S2P	S3P	S5P	S10P	PGA	PGV
+do
+
+if [[ $DIST = 000 ]];then
+continue
+fi
+
+if [[ $P1 = "" ]];then
+break
+fi
+if [[ $P1 = FAILURE ]];then
+break
+fi
+
+#Check to see if P1 is greater than some threhold. Maybe 1E-2?
+#Also is the distance is between 40 and 110?
+c2=`CompGT $P1 8e-2`
+c3=`CompGT $DIST 40`
+c4=`CompGT 110 $DIST`
+if [[ $c2 = 1 ]];then
+	file=""
+	if [[ $c3 = 1 && $c4 = 1 ]];then
+#If it is, find the corresponding sac fileS.
+	for sac in *sac
+	do
+		Dsac=`saclhdr -DIST $sac`
+		if [[ $Dsac = $DIST ]];then
+	file="$file$HOME/$dir/$dir/GOOD/$sac\t"
+		fi
+	done
+	file="$file $P1"
+	
+	echo -e "$file" >> $f2w
+#Write the sac file and the value to a file.
+	fi
+fi
+
+done < Master.psa
+done
+
+#After the file is made, copy all of those sac files into a directory to send.
+# Copy the sac files from the GOOD directory and then do processing on them afterwards!! #brilliant

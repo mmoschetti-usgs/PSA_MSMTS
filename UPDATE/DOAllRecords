@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# This file calls DOSingleRecord for all sac files in a given directory
+# It also saves the filter frequencies to a master file for the event
+
+reqparams=1
+if [ $# -ne $reqparams ];then
+	echo "Usage requires a single directory"
+	exit
+fi
+
+dir=$1
+if [ ! -d $dir ];then
+	echo "Could not find the given directory"
+	exit
+fi
+
+cd $dir
+FREQS=""
+COUNT=0
+TOT=`ls -1 ./ | wc -l`
+
+for sac in *; do
+
+let COUNT=$COUNT+1
+if [[ $sac != *.Sac && $sac != *.SAC && $sac != *.sac ]]; then
+	echo "The file is not a sac file. Skipping it!"
+	continue
+fi
+
+RES=`DOSingleRecord $sac CLEAN`
+
+freq=`echo "$RES" | tr ' ' '\n' | grep freq= | head -n 1 | cut -c 6-`
+Rfreq=`echo "$RES" | tr ' ' '\n' | grep Rfreq= | cut -c 7-`
+
+echo $freq
+echo $Rfreq
+FREQS=${FREQS}"${sac}\t$freq\t$Rfreq\n"
+
+echo "Finished file $COUNT of $TOT"
+
+done
+
+echo -e "${FREQS}" | perl -pe 'chomp if eof' > ./FilterFrequencies.txt

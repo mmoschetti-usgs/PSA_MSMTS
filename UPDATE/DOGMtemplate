@@ -1,0 +1,34 @@
+#!/bin/sh
+
+
+#####
+#   only use events with M > 3
+#####
+#head -906 l > k
+
+#####
+#  we now invoke the IRIS FetchData through DOWSGM
+#
+#  DOWSGM sets up a directory structure for processing
+#####
+###############################
+
+count=0;
+
+while read MAG	LON	LAT	DEPTH	YEAR	MON	DAY	HOUR	MIN	SEC	MSEC	YYY	XXX	ZZZ
+do
+echo $YEAR $MON $DAY $HOUR $MIN $SEC $MSEC $LAT $LON $DEPTH $MAG
+
+LOC=`java Within ${LAT} ${LON}`
+echo $LOC
+
+if [ "${LOC}" = "true" ]
+then
+#echo "${MAG}\t${LON}\t${LAT}\t${DEPTH}\t${YEAR}\t${MON}\t${DAY}\t${HOUR}\t${MIN}\t${SEC}\t${MSEC}\t${YYY}\t${XXX}\t${ZZZ}" >> j
+
+DOWSGM "${YEAR}" "${MON}" "${DAY}" "${HOUR}" "${MIN}" "${SEC}" "${MSEC}" "${LAT}" "${LON}" "${DEPTH}" "${MAG}"  "IMW" "NONE" "NONE" "UNKNOWN"
+let count=count+1;
+fi
+
+echo "Finished getting data for event number: $count\n"
+done < p

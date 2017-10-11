@@ -1,0 +1,21 @@
+#!/bin/bash
+set -x
+
+sfile='/Users/srennolet/code/c/testFiles/UG1.SAC'
+#TA.S34A..BHE.2011TEST-241.961-.SAC.ascii' 
+ #TA.336A..BHE.M.2011.309.071045.SAC.ascii'
+ #TA.S34A..BHE.2011TEST-241.961-.SAC.ascii 
+sac2ascii_c $sfile
+file=${sfile}.ascii
+
+etime=`saclhdr -O $sfile`
+length=`wc -l $file`
+dist=`saclhdr -DIST $sfile`
+mag=`saclhdr -MAG $sfile`
+delta=`saclhdr -DELTA $sfile`
+
+inter=`LowCornFreq $dist $etime $length $mag $delta`
+freq=`echo "$inter" | cut -f1`
+Rfreq=`echo "$inter" | cut -f2`
+
+mv ${sfile}.ascii.temp.txt ../../octave/temp.txt

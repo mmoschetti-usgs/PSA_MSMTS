@@ -1,0 +1,12 @@
+#!/bin/bash
+
+#This is the test file established for polysub.c
+
+home="/Users/srennolet/code/c/testfiles/"
+disp=$home"WMOKHN1.US.20.sac.disp.ascii"
+acc=$home"WMOKHN1.US.20.sac.filt.ascii"
+
+L1=`wc -l $disp`
+L2=`wc -l $acc`
+
+PolySub $L1 $L2 ${home}testt.txt

@@ -1,0 +1,253 @@
+#!/bin/bash
+
+# optional parameter: delete files
+# This deletes files made in the intermediate steps
+# Helps not clog up the directory
+# Note this does not delete the original data!
+
+# Check required paramter
+reqparams=1
+if [ $# -lt $reqparams ];then
+	echo "Usage requires a single sac file"
+	exit
+fi
+sfile=$1
+mode=$2
+
+# Check if the file is a sac file 
+if [[ $sfile != *.Sac && $sfile != *.SAC && $sfile != *.sac ]]; then
+	echo "Usage requires a sac file with extension .Sac , .SAC or .sac"
+	exit
+fi
+
+if [[ $mode == *clean* || $mode == *CLEAN* ]];then
+	echo "Clean has been set"
+	echo "All files other than the original and the psa txt file will be deleted upon completion"
+	CLEAR=1
+fi
+
+# Get the event parameters from the sac file using saclhdr
+YEAR=`saclhdr -NZYEAR $sfile`
+JDAY=`saclhdr -NZJDAY $sfile`
+MAG=`saclhdr -MAG $sfile`
+DIST=`saclhdr -DIST $sfile`
+NPTS=`saclhdr -NPTS $sfile`
+DELTA=`saclhdr -DELTA $sfile`
+DEPMAX=`saclhdr -DEPMAX $sfile`
+DEPMIN=`saclhdr -DEPMIN $sfile`
+CODE=`saclhdr -USER5 $sfile`
+# ----- Can I separate this from the data requests?? ---
+# Remove the mean of the data
+# Perform instrument response correctiongs - Done by IDOEVT
+# CHECK to make sure the amplitude values are between 1E-9 and 1 m/s/s
+MINAMP=1e-9
+MAXAMP=50.0
+
+# Check to see if the max amplitude fits in the expected range
+# Sometimes an error occurs where the min value is greater than the max
+# This indicated a bad trace and it also thrown out.
+# CompGT returns a 1 if the first value is greater than the second
+c1=`CompGT $DEPMIN $DEPMAX`
+c2=`CompGT $DEPMAX $MAXAMP`
+c3=`CompGT $MINAMP $DEPMAX`
+
+if [[ $c1 == 1 || $c2 == 1 || $c3 == 1 ]]; then
+	if [[ $CLEAR == 1 ]]; then
+		rm ${sfile}.*
+	fi
+	>&2 echo "Amplitude values are not within the expected range."
+	>&2 echo "The trace should not be used."
+	echo "err=AMP"
+	echo "freq=999"
+	echo "Rfreq=999"
+	echo "nfile=FAIL"
+	exit
+fi 
+# Window and taper the data
+	# Taper is done with gsac taper
+# Zero Pad the Data
+# Get the number of seconds to add with zeros
+ADD=`GetZeros $NPTS $DELTA`
+
+OT=`saclhdr -O $sfile`
+c4=`CompGT 0 $OT`
+
+
+if [[ $c4 == 1 ]];then
+	>&2 echo "Signal starts afer the origin time."
+	>&2 echo "Not enough signal to noise to complete"
+	echo "err=OOW"
+	echo "freq=-1"
+	echo "Rfreq=-1"
+	echo "nfile=FAIL"
+	exit
+fi
+
+BEGIN=`saclhdr -B $sfile`
+END=`saclhdr -E $sfile`
+
+
+# Zero pad the data
+	# Use gsac CUT command.
+	# Allows for n seconds to be added
+	# Make sure there are the correct number of pts in the record
+
+# How to do more complicated processing
+NEXTE=`saclhdr -T7 $sfile`
+NEXTE=$(echo "scale=8; $NEXTE-$OT" |bc);
+Cnext=`CompGT 0 $NEXTE`
+
+# If The next event is less than 0 (Usually undefined) OR
+# if the normal window is less than the next event time
+ENDTIME=$DIST
+c5=`CompGT 120 $ENDTIME`
+if [[ $c5 = 1 ]];then
+	ENDTIME=120
+fi
+CnAd=`CompGT $NEXTE $ENDTIME`
+
+if [[ $Cnext = 1 || $CnAd = 1 ]];then
+	>&2 echo "Using the distance as endtime."
+else
+	NEXTA=`saclhdr -T2 $sfile`
+	NEXTA=$(echo "scale=8; $NEXTA-$OT" |bc);
+
+	Cnext2=`CompGT 0 $NEXTA`
+	CaAd=`CompGT $NEXTA $ENDTIME`
+	if [[ $Cnext2 = 1 ]];then
+		>&2 echo "Event marked as having a follow up event"
+		>&2 echo "Record cannot be processed without better pick data"
+		echo "err=OVL"
+		echo "freq=-1"
+		echo "Rfreq=-1"
+		echo "nfile=SKIP"
+		exit
+	elif [[ $CaAd = 1 ]];then
+	>&2 echo "Using the distance as endtime."
+	else
+		ENDTIME=$NEXTA
+	fi
+
+fi # If next event exists here.
+
+sac << EOF
+cut O -120 $ENDTIME
+r $sfile
+taper
+w append .taper
+quit
+EOF
+
+if [[ ! -f ${sfile}.taper ]];then
+	>&2 echo "Signal starts afer the origin time."
+	>&2 echo "Not enough signal to noise to complete"
+	echo "err=LTA"
+	echo "freq=-1"
+	echo "Rfreq=-1"
+	echo "nfile=FAIL"
+	exit
+fi
+
+NEWPTS=`saclhdr -NPTS ${sfile}.taper`
+ADD=`GetZeros $NEWPTS $DELTA`
+
+BEGIN=`saclhdr -B $sfile`
+END=`saclhdr -E $sfile`
+
+sac << EOF
+cuterr fillz
+cut b n $ADD
+r $sfile.taper
+w append .pad
+quit
+EOF
+
+if [[ ! -f ${sfile}.taper.pad ]];then
+	>&2 echo "Signal starts afer the origin time."
+	>&2 echo "Not enough signal to noise to complete"
+	echo "err=LPA"
+	echo "freq=-1"
+	echo "Rfreq=-1"
+	echo "nfile=FAIL"
+	exit
+fi
+
+cfile=$sfile.taper.pad
+sac2ascii_c $cfile
+OT=`saclhdr -O $cfile`
+LENGTH=`wc -l $cfile.ascii`
+# LENGTH Should be the same as N2 and is a power of 2
+# If it's not a power of 2, LowCornFreq will add zeros to make it so.
+
+# Calculate the intersection ratios of noise and signal
+	# Save the freq for intersection and ratio of 3
+# LowCornFreq has a variety of checks internally including:
+	# Check if the event time is within the signal
+	# Check if the distance is positive
+	# A variety of checks to see if the frequency content is valuable
+inter=`LowCornFreq $DIST $OT $LENGTH $MAG $DELTA`
+freq=`echo "$inter" | cut -f1`
+Rfreq=`echo "$inter" | cut -f2`
+
+echo "freq=$freq"
+echo "Rfreq=$Rfreq"
+
+if [ $Rfreq == -1 ];then
+	if [[ $CLEAR == 1 ]]; then
+		rm ${sfile}.*
+	fi
+	>&2 echo "Checks failed while computing signal to noise"
+	>&2 echo "The event may not occur during the signal or"
+	>&2 echo "The signal to noise ratio may not be sufficient"
+	>&2 echo "Check the temp.txt file."
+	echo "err=SNR"
+	echo "nfile=FAIL"
+	exit;
+fi
+
+# Use the freq of ratio 3 to perform a highpass filter.
+	# Use 5 poles
+	# Use pass 2
+# Remove the zero pad
+# Integrate the record twice to get the displacement
+LPF=`echo $DELTA | awk '{print 0.4/$1}'`
+
+sac << EOF
+r $cfile
+lp n 5 pass 2 c $LPF
+hp n 5 pass 2 c $Rfreq
+w append .filt
+
+cuterr fillz
+cut $BEGIN $END
+r $cfile.filt
+w $sfile.filt
+
+int
+int
+w $sfile.disp
+quit
+EOF
+
+# Fit a poly to the displacement
+# This has been rewritten to no longer use octave.
+sac2ascii_c $sfile.disp
+dfile=$sfile.disp.ascii
+sac2ascii_c $sfile.filt
+afile=$sfile.filt.ascii
+OTnew=`saclhdr -O $sfile.filt`
+
+L1=`wc -l $dfile`
+L2=`wc -l $afile`
+PolySub $L1 $L2 $sfile
+echo "nfile=${sfile}.acc.final.txt"
+# ^ This is defined in the PolySub code.
+echo "START=$OTnew"
+# Echoing an err of 000 means that no errors were encountered.
+echo "err=000"
+### ------------------------------------------------------------------------------
+
+if [[ $CLEAR == 1 ]]; then
+	rm ${sfile}.*
+fi
+

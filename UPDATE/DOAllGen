@@ -1,0 +1,23 @@
+#!/bin/bash
+
+HOME="/Users/srennolet/Working_Data/CEUS"
+cd ${HOME}
+pwd
+while read MAG 	LON	LAT	DEPTH	YEAR	MON	DAY	HOUR	MIN	SEC	MSEC	YYY	XXX	ZZZ
+do 
+
+DIR=${YEAR}${MON}${DAY}${HOUR}${MIN}${SEC}
+
+if [ -d "$DIR" ]
+then
+cd $DIR/$DIR
+echo "Entering event $DIR"
+
+
+cd $HOME
+
+fi
+#echo -e "${MAG}\t${LON}\t${LAT}\t${DEPTH}\t${YEAR}\t${MON}\t${DAY}\t${HOUR}\t${MIN}\t${SEC}\t${MSEC}\t${YYY}\t${XXX}\t${ZZZ}" >> j_process
+
+done < l
+

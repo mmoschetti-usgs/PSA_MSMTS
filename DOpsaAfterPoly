@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -x
+
+coded="/Users/srennolet/code/c/CompleteProcess/"
+periods=( "0.1" "0.2" "0.3" "0.5" "1.0" "2.0" "3.0" "5.0" "10.0")
+
+#rm *.txt
+
+for file in AZCF.SAC.disp.new 
+do
+
+l2=`wc -l $file`
+
+for p in "${periods[@]}"
+do
+
+psa=`${coded}RScalc $p $l2`
+echo -e "$p\t$psa" >> ./LPnun.txt 
+
+done
+
+
+done
+

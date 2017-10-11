@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# This script moves all the files in the 
+# current directory into a ./TMP director
+# Also moves any stations that are deemed
+# not good in advance.
+
+mkdir TMP
+for sac in ./*
+do
+
+CHN=`saclhdr -KCMPNM $sac`
+STA=`saclhdr -KSTNM $sac`
+
+if [[ $CHN = ??Z || $STA = W35A ]];then
+	mv $sac TMP/
+fi
+
+done

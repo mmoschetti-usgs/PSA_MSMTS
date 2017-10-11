@@ -1,0 +1,68 @@
+#!/bin/bash
+# This script will make a meta data file out of each psa file. #NOT Mspa
+
+HOME=/Users/srennolet/Working_Data/CEUS
+
+dir=$1
+
+cd $HOME/$dir/$dir/GOOD
+echo "Working on directory $dir"
+
+for psa in *.psa
+do
+
+if [ ! -f $psa ] #Handle the case where there are no psa files.
+then
+continue
+fi
+
+# Some values will be taken from the psa files
+VALS=`head -1 $psa`
+cf1=`head -1 $psa | awk '{print $2}'`
+cf2=`echo $VALS | awk '{print $4}'` # I dont think these two are really necessary
+ff1=`echo $VALS | awk '{print $3}'`
+ff2=`echo $VALS | awk '{print $5}'`
+CHN=`echo $VALS | awk '{print $11}'` # THis is the one that ends in X. It looks nicer.
+PGAtime=`cat $psa | head -3 | tail -1 | awk '{print $3}'` #A period of 0 corresponds to PGA
+PGVtime=`cat $psa | head -2 | tail -1 | awk '{print $3}'` #A period of 0 corresponds to PGA
+
+# And some will be taken from the sac headers
+# First get the name of the sac file.
+IFS='\.' read NAME NET LOC SAC <<< "$psa"
+N2=`echo "$NAME" | rev | cut -c 2- |rev `
+sacfile=$N2*.$NET.$LOC.sac
+
+# Get various parameters!
+code=`saclhdr -USER5 $sacfile`
+lat=`saclhdr -STLA $sacfile`
+lon=`saclhdr -STLO $sacfile`
+elev=`saclhdr -STEL $sacfile`
+dist=`saclhdr -DIST $sacfile`
+name=`saclhdr -KSTNM $sacfile`
+delta=`saclhdr -DELTA $sacfile`
+
+#Name the meta data file
+tmp=`echo $psa | rev | cut -c 4- | rev`
+META=${tmp}meta
+
+#Write the meta data file with a setup similar to that of evt.proto
+echo CODE=\"$code\" > $META
+echo NAME=\"$name\" >> $META
+echo NW=\"$NET\" >> $META
+echo CHN=\"$CHN\" >> $META
+echo LOC=\"$LOC\" >> $META
+echo LAT=\"$lat\" >> $META
+echo LON=\"$lon\" >> $META
+echo ELEV=\"$elev\" >> $META
+echo DIST=\"$dist\" >> $META
+echo DELTA=\"$delta\" >> $META
+echo CF1=\"$cf1\" >> $META
+echo CF2=\"$cf2\" >> $META
+echo FF1=\"$ff1\" >> $META
+echo FF2=\"$ff2\" >> $META
+echo PGAtime=\"$PGAtime\" >> $META
+echo PGVtime=\"$PGVtime\" >> $META
+echo EVENT=\"$dir\" >> $META
+
+done #PSA file loop.
+

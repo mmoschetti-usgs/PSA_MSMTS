@@ -1,0 +1,219 @@
+#!/bin/bash
+
+# This file calls DOSingleRecord for all sac files in a given directory
+# It also saves the filter frequencies to a master file for the event
+reqparams=1
+if [ $# -ne $reqparams ];then
+	echo "Usage requires a single directory"
+	exit
+fi
+
+dir=$1
+if [ ! -d $dir ];then
+	echo "Could not find the given directory"
+	exit
+fi
+
+CLEAR=0
+cd $dir
+#rm *.psa
+#rm *.Mpsa
+# Move verticals to a temporary directory 
+#DOMoveVerticals
+
+FREQS=""
+COUNT=0
+TOT=`ls -1 ./*.sac | wc -l`
+
+for sac in *.sac; do
+let COUNT=$COUNT+1
+if [[ $sac != *.Sac && $sac != *.SAC && $sac != *.sac ]]; then
+	echo "The file is not a sac file. Skipping it!"
+	continue
+fi
+
+CHN=`saclhdr -KCMPNM $sac`
+if [[ $CHN = ??1 || $CHN = ??E ]];then
+
+#Get The horizontal pair to this record.
+STA=`saclhdr -KSTNM $sac`
+NW=`saclhdr -KNETWK $sac`
+LOC=`saclhdr -KHOLE $sac`
+DIST=`saclhdr -DIST $sac`
+MAG=`saclhdr -MAG $sac`
+LAT=`saclhdr -STLA $sac`
+LON=`saclhdr -STLO $sac`
+ELEV=`saclhdr -STEL $sac`
+
+if [[ $LOC = -12345 ]];then
+	LOC=""
+fi
+# If both HH and BH are available, chose HH (Ignore BH)
+# If HN is available, chose it!
+if [[ $CHN = BH? ]];then
+	if [[ -f ${STA}HHE.${NW}.${LOC}.sac && -f ${STA}HHN.${NW}.${LOC}.sac ]];then
+		echo "This channel is one of many at the same location."
+		echo "It will be skipped and the other will be processed."
+		continue;
+	fi
+	if [[ -f ${STA}HNE.${NW}.20.sac && -f ${STA}HNN.${NW}.${LOC}.sac ]];then
+		echo "This channel is one of many at the same location."
+		echo "It will be skipped and the other will be processed."
+		continue;
+	fi
+	
+fi
+if [[ $CHN = HH? ]];then
+	if [[ -f ${STA}HNE.${NW}.20.sac && -f ${STA}HNN.${NW}.${LOC}.sac ]];then
+		echo "This channel is one of many at the same location."
+		echo "It will be skipped and the other will be processed."
+		continue;
+	fi
+fi	
+
+CHN2=`echo "$CHN" | rev | cut -c 2- |rev `
+CHQ=$CHN2"X"
+if [[ $CHN = ??1 ]]; then
+	CHN2=$CHN2"2"
+else
+	CHN2=$CHN2"N"
+fi
+sac2=${STA}${CHN2}.${NW}.${LOC}.sac
+sacQ=${STA}${CHQ}.${NW}.${LOC}.sac
+
+if [ ! -f $sac2 ];then
+	echo "The pair file could not be found for file $sac"
+	echo "$sac2 does not exist, or failed instrument resonse processing."
+	echo "(Broadband channel with non linearity present.)"
+	continue
+fi
+
+echo "------------------------------------------------------------------------------"
+echo "Looking at file $sac with partner file $sac2"
+echo "Current directory is"
+pwd
+echo "Event has a magnitude of $MAG"
+echo ""
+
+# Process both of the files
+RES=`DOS1 $sac`
+
+freq=`echo "$RES" | tr ' ' '\n' | grep freq= | head -n 1 | cut -c 6-`
+Rfreq=`echo "$RES" | tr ' ' '\n' | grep Rfreq= | cut -c 7-`
+fname=`echo "$RES" | tr ' ' '\n' | grep nfile= | cut -c 7-`
+ETIME1=`echo "$RES" | tr ' ' '\n' | grep START= | cut -c 7-`
+
+echo "|Cross Over Frequency - $freq (R1)"
+echo "|Cross Over Frequency - $Rfreq (R3)"
+echo "|File for RotD50 - $fname"
+FREQS=${FREQS}"${sac}\t${freq}\t${Rfreq}\n"
+
+RES=`DOS1 $sac2`
+
+freq2=`echo "$RES" | tr ' ' '\n' | grep freq= | head -n 1 | cut -c 6-`
+Rfreq2=`echo "$RES" | tr ' ' '\n' | grep Rfreq= | cut -c 7-`
+fname2=`echo "$RES" | tr ' ' '\n' | grep nfile= | cut -c 7-`
+ETIME2=`echo "$RES" | tr ' ' '\n' | grep START= | cut -c 7-`
+
+echo "|Cross Over Frequency - $freq2 (R1)"
+echo "|Cross Over Frequency - $Rfreq2 (R3)"
+echo "|File for RotD50 - $fname2"
+FREQS=${FREQS}"${sac2}\t${freq2}\t${Rfreq2}\n"
+echo""
+
+#Perform RotD50 on the files to get GM PSA
+# Loop over all the periods
+if [[ $fname = "FAIL" || $fname2 = "FAIL" || $Rfreq = "" || $Rfreq2 = ""  ]];then
+	Rfreq=9999
+	Rfreq2=9999
+	if [[ $CLEAR == 1 ]]; then
+		rm ${sac}.*
+		rm ${sac2}.*
+	fi
+	echo "One or more of the files filed in the processing steps."
+	echo "PSA values will not be calculated or reported."
+	echo "------------------------------------------------------------------------------"
+	echo "Finished file $COUNT of $TOT"
+	continue
+else 
+	L1=`wc -l $fname`
+	L2=`wc -l $fname2`
+fi
+az1=`saclhdr -CMPAZ $sac`
+az2=`saclhdr -CMPAZ $sac2`
+DELTA=`saclhdr -DELTA $sac`
+DIF=$(echo "scale=8; $ETIME1-$ETIME2" |bc);
+CLOSE=`echo "$DIF" | awk ' { if($1>=0) { print $1} else {print $1*-1 }}'`
+C1=`CompGT $CLOSE 5`
+if [ $C1 = 1 ];then
+	if [[ $CLEAR == 1 ]]; then
+		rm ${sac}.*
+		rm ${sac2}.*
+	fi
+	echo "Bad time windowing. Skip it!"
+	echo "------------------------------------------------------------------------------"
+	echo "Finished file $COUNT of $TOT"
+	continue
+fi
+echo "Beginning RotD50 on the paired sac files"
+
+readarray -t periods < /home/srennolet/Periods.txt
+
+DAT="$DIST\t$freq\t$Rfreq\t$freq2\t$Rfreq2\t$LAT\t$LON\t$ELEV\t$STA\t$NW\t$CHQ"
+#Write meta data to psa files
+echo -e "${DAT}" > $sacQ.psa
+echo -e "${DAT}" > $sacQ.Mpsa
+
+RATIO=1.25 #This value effects the usable periods for spectral measurements
+
+for p in "${periods[@]}"
+do
+# Compare the filter period to the spectral period
+t1=$(echo "scale=8; 1/($Rfreq*$RATIO)" |bc);
+t2=$(echo "scale=8; 1/($Rfreq2*$RATIO)" |bc);
+GT=`CompGT $p $t1`
+GT2=`CompGT $p $t2`
+if [[ $GT = 1 || $GT2 = 1 ]];then
+	psa="-9999"
+	Mpsa="-9999"
+else
+	work=`RotD50 $L1 $L2 $DELTA $az1 $az2 $p`
+	if [[ $work = 0000 || $work = "" ]];then
+		psa=-9999
+		Mpsa=-9999
+	else
+		echo $work
+		set $work
+		psa=$1
+		Mpsa=$2
+		tim=$3
+	fi
+fi
+
+writ=${p}\\t${psa}
+writM=${p}\\t${psa}
+
+C1=`CompGT $3 0`
+if [ $C1 = 1 ];then
+	maxtime=$(echo "scale=8; $tim-$ETIME1" |bc);
+	writ=${writ}\\t${maxtime}
+	writM=${writM}\\t${maxtime}
+
+fi
+
+echo -e "${writ}" >> $sacQ.psa
+echo -e "${writM}" >> $sacQ.Mpsa
+
+done
+
+if [[ $CLEAR == 1 ]]; then
+	rm ${sac}.*
+	rm ${sac2}.*
+fi
+fi
+
+echo "Finished file $COUNT of $TOT"
+
+done
+
+echo -e "${FREQS}" | perl -pe 'chomp if eof' > ./FilterFrequencies.txt
